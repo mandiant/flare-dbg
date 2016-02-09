@@ -192,7 +192,11 @@ def find_args(vw, fromva, num_push_args, regs=[]):
         va = fva
         dis = []
         while va < fromva:
-            op = vw.parseOpcode(va)
+            try:
+                op = vw.parseOpcode(va)
+            except envi.InvalidInstruction as e:
+                print str( e )
+                break
             dis.append(op)
             va += op.size
         push_args = find_push_args(vw, dis, num_push_args)

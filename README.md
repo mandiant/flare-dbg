@@ -27,6 +27,6 @@ Once your script path is setup, scripts are run from the windbg console as follo
 > !py <script_name>
 ```
 
-
-
-
+# Installing and running plugins
+The recommended way to install scripts is to add the plugins directory of this project to your ```PYTHONPATH```.
+Another option is to follow the second option described above in the ```Running scripts``` section. Simply copy the plugin scripts to the root of your windbg directory.

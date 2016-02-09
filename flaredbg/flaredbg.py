@@ -15,6 +15,7 @@
 ########################################################################
 
 # Python imports
+import os
 import sys
 import struct
 import tempfile
@@ -133,7 +134,7 @@ class DebugUtils():
 
         Parameters:
           fp : file path 
-          reanalyze : (optional) reanalyze the file
+          reanalyze : (optional) reanalyze the file, else pull from cache if exists
         """
         print " [+] Getting vivisect workspace."
         import vivisect  # expensive import, so let's on demand load it
@@ -150,19 +151,16 @@ class DebugUtils():
 
         print " [+] vivisect workspace load complete."
 
-    def get_workspace_from_addr(self, addr, entry_point=None, use_pe_load=True):
+    def get_workspace_from_addr(self, addr, entry_point=None, use_pe_load=True, reanalyze=False):
         """
         Try to create a PE file given an address, then pass the created PE file to vivisect to create a workspace.
         
         Parameters:
           addr : any virtual address within a memory region
           entry_point : (optional) original entry point 
-          use_pe_load : (optional) attempt to save the memory region bytes to disk and load as PE 
+          use_pe_load : (optional) attempt to save the memory region bytes to disk and load as PE
+          reanalyze : (optional) reanalyze the vivisect workspace, use this if the workspace has become stale
         """
-
-        # TODO: maybe save the analysis after complete, that way we don't have to reprocess again?
-        # temp_dir = tempfile.gettempdir()
-        # fname = '%s\\%d_0x%x.mem' % (temp_dir, self.process.get_pid(), base_addr)
 
         print " [+] Getting vivisect workspace."
         import vivisect  # expensive import, so let's on-demand load it
@@ -170,56 +168,71 @@ class DebugUtils():
         va = pu.get_allocation_base(addr)
         bytes = pu.get_process_region_bytes(va)
 
+        storage_name = '%d_%x_%x' % (self.process.get_pid(), va, len(bytes))
+
         self.vw = vivisect.VivWorkspace()
-        self.vw.setMeta('Architecture', self.arch)
-        self.vw.setMeta('Platform', 'windows')
-        self.vw.setMeta('Format', 'pe')
-        self.vw.config.viv.parsers.pe.nx = True
 
-        if utils.is_legit_pe(bytes) and use_pe_load:
-            import vivisect.parsers.pe
-            temp_dir = tempfile.gettempdir()
-            fname = '%s\\%d_0x%x.mem' % (temp_dir, self.process.get_pid(), va)
-            open(fname, 'wb').write(bytes)
-            f = file(fname, 'rb')
-            peobj = PE.PE(f, inmem=True)
-            peobj.filesize = len(bytes)
-            vivisect.parsers.pe.loadPeIntoWorkspace(self.vw, peobj, fname)
-            if entry_point:
-                self.vw.addEntryPoint(entry_point)
-            self.vw._snapInAnalysisModules()
+        temp_dir = tempfile.gettempdir()
+        storage_fname = '%s\\%s.viv' % (temp_dir, storage_name)
+
+        # Don't reanalyze the workspace, try to grab a cached one even if stale
+        if not reanalyze and os.path.exists(storage_fname):
+            self.vw.loadWorkspace(storage_fname)
+        # Reanalyze and create new workspace
         else:
-            import vivisect.parsers.pe
-            import envi.memory
-            import vivisect.const
-            defcall = vivisect.parsers.pe.defcalls.get(self.arch)
-            self.vw.setMeta("DefaultCall", defcall)
-            self.vw.addMemoryMap(va, envi.memory.MM_RWX, "", bytes)
-            pe = None
-            if utils.is_legit_pe(bytes):
-                pe = utils.get_pe_obj(va)
-            if not entry_point and pe:
-                entry_point = pe.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint + va
-            if entry_point:
-                self.vw.addEntryPoint(entry_point)
-                self.vw.addExport(entry_point, vivisect.const.EXP_FUNCTION, '__entry', '')
-            if pe:
-                self.vw.addVaSet("Library Loads",
-                                 (("Address", vivisect.const.VASET_ADDRESS), ("Library", vivisect.const.VASET_STRING)))
-                self.vw.addVaSet('pe:ordinals',
-                                 (('Address', vivisect.const.VASET_ADDRESS), ('Ordinal', vivisect.const.VASET_INTEGER)))
-                # Add exports
-                for rva, _, expname in pe.getExports():
-                    self.vw.addExport(
-                        va + rva, vivisect.const.EXP_UNTYPED, expname, '')
-                # Add imports
-                for rva, lname, iname in pe.getImports():
-                    if self.vw.probeMemory(rva + va, 4, envi.memory.MM_READ):
-                        self.vw.makeImport(rva + va, lname, iname)
+            self.vw.setMeta('Architecture', self.arch)
+            self.vw.setMeta('Platform', 'windows')
+            self.vw.setMeta('Format', 'pe')
+            self.vw.config.viv.parsers.pe.nx = True
 
-            self.vw._snapInAnalysisModules()
+            if utils.is_legit_pe(bytes) and use_pe_load:
+                import vivisect.parsers.pe
+                fname = '%s\\%s.mem' % (temp_dir, storage_name)
+                open(fname, 'wb').write(bytes)
+                f = file(fname, 'rb')
+                peobj = PE.PE(f, inmem=True)
+                peobj.filesize = len(bytes)
+                vivisect.parsers.pe.loadPeIntoWorkspace(self.vw, peobj, fname)
+                if entry_point:
+                    self.vw.addEntryPoint(entry_point)
+                self.vw._snapInAnalysisModules()
+            else:
+                import vivisect.parsers.pe
+                import envi.memory
+                import vivisect.const
+                defcall = vivisect.parsers.pe.defcalls.get(self.arch)
+                self.vw.setMeta("DefaultCall", defcall)
+                self.vw.addMemoryMap(va, envi.memory.MM_RWX, "", bytes)
+                pe = None
+                if utils.is_legit_pe(bytes):
+                    pe = utils.get_pe_obj(va)
+                if not entry_point and pe:
+                    entry_point = pe.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint + va
+                if entry_point:
+                    self.vw.addEntryPoint(entry_point)
+                    self.vw.addExport(entry_point, vivisect.const.EXP_FUNCTION, '__entry', '')
+                if pe:
+                    self.vw.addVaSet("Library Loads",
+                                     (("Address", vivisect.const.VASET_ADDRESS), ("Library", vivisect.const.VASET_STRING)))
+                    self.vw.addVaSet('pe:ordinals',
+                                     (('Address', vivisect.const.VASET_ADDRESS), ('Ordinal', vivisect.const.VASET_INTEGER)))
+                    # Add exports
+                    for rva, _, expname in pe.getExports():
+                        self.vw.addExport(
+                            va + rva, vivisect.const.EXP_UNTYPED, expname, '')
+                    # Add imports
+                    for rva, lname, iname in pe.getImports():
+                        if self.vw.probeMemory(rva + va, 4, envi.memory.MM_READ):
+                            self.vw.makeImport(rva + va, lname, iname)
 
-        self.vw.analyze()
+                self.vw._snapInAnalysisModules()
+
+            # save the analysis
+            self.vw.setMeta("StorageModule", "vivisect.storage.basicfile")
+            self.vw.setMeta("StorageName", storage_fname)
+
+            self.vw.analyze()
+            self.vw.saveWorkspace()
         print " [+] vivisect workspace load complete."
 
     """
@@ -1015,6 +1028,8 @@ class DebugUtils():
             if handler.ctrlbr:
                 print "Ctrl+Break received, stopping script."
                 raise ControlBreakException()
+            if handler.av:
+                raise AccessViolationException(handler.except_addr)
             # Hit a breakpoint that wasn't set by us
             print "Hit new breakpoint"
             sys.exit()
@@ -1626,7 +1641,9 @@ class BreakpointExceptionHandler(pykd.eventHandler):
         pykd.eventHandler.__init__(self)
         self.pykd_version = get_pykd_version()
         self.bp_hit_addr = None
+        self.except_addr = None
         self.ctrlbr = False
+        self.av = False
         if type(addrs) in (int, long):
             addrs = [addrs]
         self.bp_ids = {}
@@ -1705,6 +1722,11 @@ class BreakpointExceptionHandler(pykd.eventHandler):
 
         if except_code == winappdbg.win32.kernel32.STATUS_BREAKPOINT:
             self.ctrlbr = True
+            self.remove_breakpoints()
+            ret = pykd.eventResult.Break
+        elif except_code == winappdbg.win32.kernel32.STATUS_ACCESS_VIOLATION:
+            self.av = True
+            self.except_addr = cexcept_addr
             self.remove_breakpoints()
             ret = pykd.eventResult.Break
 
