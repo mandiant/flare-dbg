@@ -11,9 +11,8 @@ flare-dbg is a project meant to aid malware reverse engineers in rapidly develop
   1. ```pip install winappdbg```
 3. Setup ```vivisect```
   1. Install vivisect using one of the following options:
-    1. Install package using pip: ```pip install vivisect-wb```
-    2. Install source using pip: ```pip install https://github.com/williballenthin/vivisect/zipball/master```
-    3. Download and extract upstream [vivisect](https://github.com/vivisect/vivisect) and set ```PYTHONPATH``` to the extracted directory.
+    1. Install source using pip: ```pip install https://github.com/williballenthin/vivisect/zipball/master```
+    2. Download and extract upstream [vivisect](https://github.com/vivisect/vivisect) and set ```PYTHONPATH``` to the extracted directory.
   2. Ensure you can import vivisect from a python shell: ```import vivisect```.
 4. Setup ```flaredbg```
   1. Install flaredbg using ```setup.py```
@@ -28,6 +27,6 @@ Once your script path is setup, scripts are run from the windbg console as follo
 > !py <script_name>
 ```
 
-
-
-
+# Installing and running plugins
+The recommended way to install scripts is to add the plugins directory of this project to your ```PYTHONPATH```.
+Another option is to follow the second option described above in the ```Running scripts``` section. Simply copy the plugin scripts to the root of your windbg directory.
