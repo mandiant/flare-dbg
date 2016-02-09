@@ -22,6 +22,7 @@ setup(
     url='https://github.com/fireeye/flare-dbg',
     packages=[
         'flaredbg',
+        'plugins',
         'examples',
     ],
     include_package_data=True,
