@@ -1,7 +1,7 @@
 # Introduction
 flare-dbg is a project meant to aid malware reverse engineers in rapidly developing debugger scripts.
 
-#Installation/setup
+# Installation/setup
 1. Install the ```pykd``` windbg extension from: https://pykd.codeplex.com/releases
   1. Download the Bootstrapper dll.
   2. Add the Bootstrapper pykd.dll file into your winext directory. Something like ```%ProgramFiles%\Debugging Tools for Windows\winext```.
