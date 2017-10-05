@@ -1479,9 +1479,12 @@ class ProcessUtils:
             memobj = envi.memory.MemoryObject()
             memobj.addMemoryMap(base, envi.memory.MM_RWX, "", dll_mem)
             pe = PE.peFromMemoryObject(memobj, base)
+        else:
+            pe = PE.peFromFileName(module.get_filename())
 
-            for rva, _, func_name in pe.getExports():
-                exports[base + rva] = func_name
+        for rva, _, func_name in pe.getExports():
+            exports[base + rva] = func_name
+
 
         return exports
 
